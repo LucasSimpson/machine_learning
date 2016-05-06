@@ -6,7 +6,7 @@ import numpy as np
 import json, gym, time
 
 class Disturb (object):
-    prob = 1.0 / (50) # 1 in 500 frames
+    prob = 1.0 / 4 # 1 in 4 frames
     min_space = 2 # at least 50 frames between disturbances
     action_space = 2 # 2 options in action space
 
@@ -71,4 +71,4 @@ def eval_iter (disturbance=False):
     return frame_count
 
 while (True):
-    eval_iter (disturbance=False)
+    eval_iter (disturbance=True)

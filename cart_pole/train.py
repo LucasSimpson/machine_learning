@@ -13,7 +13,7 @@ hidden_size = 8 # size of hidden layers in NN
 num_actions = 2 # [left, right]
 epsilon = 0.2 # chance of random action space sampling
 e_decay = 0.5e-3 # decay rate of epsilon
-batch_size = 5 # batch size
+batch_size = 10 # batch size
 memory_size = 3000 # remembered states
 
 def get_model ():
@@ -98,6 +98,13 @@ class ExperienceReplay (object):
             self.frozen_model.set_weights (model.get_weights ())
 
         # create batch
+        # get set of memories according to PDF as described by final reward
+        scores = [mem [2] for mem in self.memory]
+        total = np.sum (scores)
+        probs = map (lambda x: x / total, scores)
+        indices = [i for i in range (len (self.memory))]
+        sampled_memory_indices = np.random.choice (indices, size=batch_size, p=probs)
+        #for i, r_id in enumerate (sampled_memory_indices):
         for i, r_id in enumerate (np.random.randint (0, len (self.memory), size=batch_size)):
 
             # get data from memory
@@ -137,7 +144,8 @@ def train_iter (epoch):
     while not done:
         # render
         if epoch % 100 == 0:
-            env.render ()
+            pass
+            #env.render ()
             #time.sleep (0.05)
 
         # set previous obs (state[t-1])
@@ -153,8 +161,7 @@ def train_iter (epoch):
 
         # evaluate action
         obs_t, reward, done, info = env.step (action)
-        if reward >= 0:
-            frame_count += 1
+        frame_count += 1
 
         # add score
         score += reward
@@ -169,7 +176,7 @@ def train_iter (epoch):
             loss += model.train_on_batch (inputs, targets)
 
         # exit condition
-        if frame_count >= 5000:
+        if frame_count >= 200: # bullllsshhiittt
             done = True
 
     # commit memories
@@ -177,14 +184,49 @@ def train_iter (epoch):
     return frame_count, loss
 
 
+def eval_iter ():
+    frame_count = 0
+    score = 0
+    done = False
+    obs_t = env.reset ()
+
+    while not done:
+        # set previous obs (state[t-1])
+        obs_tm1 = obs_t
+
+        # select action from quality network
+        q = model.predict (np.matrix ([obs_t]))
+        action = np.argmax (q)
+
+        # evaluate action
+        obs_t, reward, done, info = env.step (action)
+        frame_count += 1
+
+        # add score
+        score += reward
+
+        # exit condition
+        if frame_count >= 200: # bullllsshhiittt
+            done = True
+
+    return score
+
+def full_eval ():
+    # 100 run evaluation
+    print 'doing evaluation... '
+    aves = list ()
+    for a in range (100):
+        aves.append (eval_iter ())
+    print 'eval average over 100 runs is %s' % np.mean (aves)
+    return np.mean (aves) >= 195
+
 i = 0
 highest = 0
 scores = [0]
 averages = list ()
-
-
+SOLVED = False
 #env.monitor.start ('cartpole-mon1')
-while (highest < 1000):
+while (not SOLVED):
 #while (np.mean (scores) < 195):
     i += 1
     f, loss = train_iter (i)
@@ -192,13 +234,20 @@ while (highest < 1000):
     if f > highest:
         highest = f
 
+    if highest >= 200:
+        SOLVED = full_eval ()
+
     scores.append (f)
     if len (scores) > 100:
         del scores [0]
 
     averages.append (np.mean (scores))
     print "Epoch: {:05d} | Loss: {:e} | Steps/High: {:04d}/{:04d} | Mean: {:2f} | Delta: {:1f}".format (i, loss, f, highest, averages [-1], averages [-1] - averages [-min (25, len (averages))])
+
+
+
 #env.monitor.close ()
+
 
 model.save_weights("model3.h5", overwrite=True)
 with open("model3.json", "w") as outfile:
